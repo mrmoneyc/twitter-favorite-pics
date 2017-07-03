@@ -267,7 +267,7 @@ func main() {
 	for _, v := range fav {
 		i := sort.SearchStrings(filterAccount, v.User.ScreenName)
 
-		if i < len(filterAccount) && filterAccount[i] == v.User.ScreenName {
+		if (i < len(filterAccount) && filterAccount[i] == v.User.ScreenName) || len(filterAccount) <= 0 {
 			for _, val := range v.Entities.Media {
 				largeMediaURL := val.MediaURL + ":large"
 				sl := strings.Split(val.MediaURL, "/")
