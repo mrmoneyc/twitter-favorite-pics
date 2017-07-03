@@ -88,6 +88,32 @@ func writeConfig(cfg map[string]string, cfgFile string) (bool, error) {
 	return true, nil
 }
 
+func openBrowser(url string) error {
+	browser := "xdg-open"
+	args := []string{url}
+
+	if runtime.GOOS == "windows" {
+		browser = "rundll32.exe"
+		args = []string{"url.dll,FileProtocolHandler", url}
+	} else if runtime.GOOS == "darwin" {
+		browser = "open"
+	}
+
+	browser, err := exec.LookPath(browser)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command(browser, args...)
+	cmd.Stderr = os.Stderr
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func getAuthorizeToken(c *oauth.Consumer, cfg map[string]string) (*oauth.AccessToken, error) {
 	accessToken, foundToken := cfg["AccessToken"]
 	accessSecret, foundSecret := cfg["AccessSecret"]
@@ -102,30 +128,15 @@ func getAuthorizeToken(c *oauth.Consumer, cfg map[string]string) (*oauth.AccessT
 			return nil, err
 		}
 
-		browser := "xdg-open"
-		args := []string{url}
-
-		if runtime.GOOS == "windows" {
-			browser = "rundll32.exe"
-			args = []string{"url.dll,FileProtocolHandler", url}
-		} else if runtime.GOOS == "darwin" {
-			browser = "open"
-		}
-
 		fmt.Println("(1) Go to: " + url)
 		fmt.Println("(2) Grant access, you should get back a verification code.")
+		fmt.Print("(3) Enter that verification code here: ")
 
-		browser, err = exec.LookPath(browser)
-		if err == nil {
-			cmd := exec.Command(browser, args...)
-			cmd.Stderr = os.Stderr
-			err = cmd.Start()
-			if err != nil {
-				return nil, err
-			}
+		err = openBrowser(url)
+		if err != nil {
+			return nil, err
 		}
 
-		fmt.Print("(3) Enter that verification code here: ")
 		verificationCode := ""
 		fmt.Scanln(&verificationCode)
 
