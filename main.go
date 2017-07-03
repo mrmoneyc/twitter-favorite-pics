@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mrjones/oauth"
 )
@@ -24,6 +26,8 @@ const (
 	accessTokenURL    string = "https://api.twitter.com/oauth/access_token"
 	apiBase           string = "https://api.twitter.com/1.1/"
 	apiGetFavorites   string = apiBase + "favorites/list.json?count=200"
+	apiUnFavorite     string = apiBase + "favorites/destroy.json?id="
+	apiRequestLimit   int    = 75
 )
 
 func init() {
@@ -39,7 +43,6 @@ func getHomeDir() string {
 
 		return home
 	}
-
 	return os.Getenv("HOME")
 }
 
@@ -72,7 +75,7 @@ func getConfig() (string, map[string]string, error) {
 	}
 
 	if err != nil {
-		var consumerKey, consumerSecret, dlPath, filterAccount string
+		var consumerKey, consumerSecret, dlPath, filterAccount, dlWithoutAsk, unFavAfterDL string
 		fmt.Print("Enter consumer key: ")
 		fmt.Scanln(&consumerKey)
 		fmt.Print("Enter consumer secret: ")
@@ -81,11 +84,29 @@ func getConfig() (string, map[string]string, error) {
 		fmt.Scanln(&dlPath)
 		fmt.Print("Enter twitter screen name that want to filter for download (separate by comma): ")
 		fmt.Scanln(&filterAccount)
+		fmt.Print("Continue download without asking? (y/N): ")
+		fmt.Scanln(&dlWithoutAsk)
+		dlWithoutAsk = strings.ToLower(dlWithoutAsk)
+		fmt.Print("Un-favorite tweet after download? (y/N): ")
+		fmt.Scanln(&unFavAfterDL)
+		unFavAfterDL = strings.ToLower(unFavAfterDL)
 
 		cfg["ConsumerKey"] = consumerKey
 		cfg["ConsumerSecret"] = consumerSecret
 		cfg["DownloadPath"] = dlPath
 		cfg["FilterAccount"] = filterAccount
+
+		if dlWithoutAsk == "y" || dlWithoutAsk == "yes" {
+			cfg["DownloadWithoutAsking"] = "true"
+		} else {
+			cfg["DownloadWithoutAsking"] = "false"
+		}
+
+		if unFavAfterDL == "y" || unFavAfterDL == "yes" {
+			cfg["UnFavAfterDownload"] = "true"
+		} else {
+			cfg["UnFavAfterDownload"] = "false"
+		}
 	} else {
 		err = json.Unmarshal(buf, &cfg)
 		if err != nil {
@@ -171,6 +192,21 @@ func getAuthorizeToken(c *oauth.Consumer, cfg map[string]string) (*oauth.AccessT
 	return authorizeToken, nil
 }
 
+func unFavoriteTweet(client *http.Client, tweetID string) {
+	url := apiUnFavorite + tweetID
+
+	reqBody := map[string]string{"id": tweetID}
+	jsonBody, _ := json.Marshal(reqBody)
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Fatal(resp.Status)
+	}
+}
+
 func downloadWorker(wg *sync.WaitGroup, url string, dlPath string, fileName string) {
 	defer wg.Done()
 
@@ -200,7 +236,7 @@ func downloadWorker(wg *sync.WaitGroup, url string, dlPath string, fileName stri
 	f.Close()
 }
 
-func downloadMedia(client *http.Client, url string, dlPath string, filterAccount []string) (string, error) {
+func downloadMedia(client *http.Client, url string, dlPath string, filterAccount []string, unFav bool) (string, error) {
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", err
@@ -239,6 +275,9 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 				go downloadWorker(&wg, largeMediaURL, filepath.Join(dlPath, v.User.ScreenName), fileName)
 			}
 
+			if unFav && len(v.Entities.Media) > 0 {
+				go unFavoriteTweet(client, v.IDStr)
+			}
 		}
 
 		lastTweetID = v.IDStr
@@ -261,6 +300,20 @@ func main() {
 
 		filterAccount = strings.Split(cfg["FilterAccount"], ",")
 		sort.Strings(filterAccount)
+	}
+
+	var dlWithoutAsk bool
+	if strings.ToLower(cfg["DownloadWithoutAsking"]) == "true" {
+		dlWithoutAsk = true
+	} else {
+		dlWithoutAsk = false
+	}
+
+	var unFav bool
+	if strings.ToLower(cfg["UnFavAfterDownload"]) == "true" {
+		unFav = true
+	} else {
+		unFav = false
 	}
 
 	c := oauth.NewConsumer(
@@ -306,19 +359,31 @@ func main() {
 
 	var lastTweetID string
 	continueDL := "y"
-	for continueDL == "y" {
+	reqCounter := 0
+	for continueDL == "y" || dlWithoutAsk {
+		if reqCounter >= apiRequestLimit {
+			fmt.Printf("API request quota exceeded, wait for 15 minute to unlock...")
+			time.Sleep(15 * time.Minute)
+			reqCounter = 0
+		}
+
 		url := apiGetFavorites
 		if lastTweetID != "" {
 			url = apiGetFavorites + "&max_id=" + lastTweetID
 		}
 
-		lastTweetID, err = downloadMedia(client, url, dlPath, filterAccount)
+		lastTweetID, err = downloadMedia(client, url, dlPath, filterAccount, unFav)
 		if err != nil {
 			log.Fatal(err)
+			break
 		}
 
-		fmt.Print("Type 'y' to continue: ")
-		fmt.Scanln(&continueDL)
+		if !dlWithoutAsk {
+			fmt.Print("Type 'y' to continue: ")
+			fmt.Scanln(&continueDL)
+		}
+
+		reqCounter++
 	}
 
 	fmt.Printf("All media is stored in: %v\n", dlPath)
