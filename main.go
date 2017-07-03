@@ -23,7 +23,7 @@ const (
 	authorizeTokenURL string = "https://api.twitter.com/oauth/authorize"
 	accessTokenURL    string = "https://api.twitter.com/oauth/access_token"
 	apiBase           string = "https://api.twitter.com/1.1/"
-	apiFavoriteList   string = apiBase + "favorites/list.json?count=201"
+	apiGetFavorites   string = apiBase + "favorites/list.json?count=200"
 )
 
 func init() {
@@ -171,9 +171,10 @@ func getAuthorizeToken(c *oauth.Consumer, cfg map[string]string) (*oauth.AccessT
 	return authorizeToken, nil
 }
 
-func downloadMedia(wg *sync.WaitGroup, url string, dlPath string, fileName string) {
+func downloadWorker(wg *sync.WaitGroup, url string, dlPath string, fileName string) {
 	defer wg.Done()
-	fmt.Printf("Get %v\n", fileName)
+
+	fmt.Printf("Get: %v\n", fileName)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -199,6 +200,55 @@ func downloadMedia(wg *sync.WaitGroup, url string, dlPath string, fileName strin
 	f.Close()
 }
 
+func downloadMedia(client *http.Client, url string, dlPath string, filterAccount []string) (string, error) {
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf(resp.Status)
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var fav FavoriteList
+
+	if err := json.Unmarshal([]byte(body), &fav); err != nil {
+		return "", err
+	}
+
+	var wg sync.WaitGroup
+	var lastTweetID string
+
+	for _, v := range fav {
+		i := sort.SearchStrings(filterAccount, v.User.ScreenName)
+
+		if (i < len(filterAccount) && filterAccount[i] == v.User.ScreenName) || len(filterAccount) <= 0 {
+			for _, val := range v.Entities.Media {
+				largeMediaURL := val.MediaURL + ":large"
+				sl := strings.Split(val.MediaURL, "/")
+				fileName := sl[len(sl)-1]
+
+				wg.Add(1)
+				go downloadWorker(&wg, largeMediaURL, filepath.Join(dlPath, v.User.ScreenName), fileName)
+			}
+
+		}
+
+		lastTweetID = v.IDStr
+	}
+
+	wg.Wait()
+
+	return lastTweetID, nil
+}
+
 func main() {
 	cfgFile, cfg, err := getConfig()
 	if err != nil {
@@ -207,6 +257,8 @@ func main() {
 
 	var filterAccount []string
 	if len(cfg["FilterAccount"]) > 0 {
+		fmt.Printf("Filter account: %v\n", cfg["FilterAccount"])
+
 		filterAccount = strings.Split(cfg["FilterAccount"], ",")
 		sort.Strings(filterAccount)
 	}
@@ -238,23 +290,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	resp, err := client.Get(apiFavoriteList)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var fav FavoriteList
-
-	if err := json.Unmarshal([]byte(body), &fav); err != nil {
-		log.Fatal(err)
-	}
-
 	dlPath, foundDLPath := cfg["DownloadPath"]
 	if !foundDLPath {
 		currentPath, err := filepath.Abs(filepath.Dir(os.Args[0]))
@@ -269,25 +304,22 @@ func main() {
 	}
 	dlPath = filepath.Join(dlPath, "twitter-favorite-pics")
 
-	fmt.Printf("Download Path: %v\n", dlPath)
-
-	var wg sync.WaitGroup
-
-	for _, v := range fav {
-		i := sort.SearchStrings(filterAccount, v.User.ScreenName)
-
-		if (i < len(filterAccount) && filterAccount[i] == v.User.ScreenName) || len(filterAccount) <= 0 {
-			for _, val := range v.Entities.Media {
-				largeMediaURL := val.MediaURL + ":large"
-				sl := strings.Split(val.MediaURL, "/")
-				fileName := sl[len(sl)-1]
-
-				wg.Add(1)
-				go downloadMedia(&wg, largeMediaURL, filepath.Join(dlPath, v.User.ScreenName), fileName)
-			}
+	var lastTweetID string
+	continueDL := "y"
+	for continueDL == "y" {
+		url := apiGetFavorites
+		if lastTweetID != "" {
+			url = apiGetFavorites + "&max_id=" + lastTweetID
 		}
+
+		lastTweetID, err = downloadMedia(client, url, dlPath, filterAccount)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Print("Type 'y' to continue: ")
+		fmt.Scanln(&continueDL)
 	}
 
-	wg.Wait()
-	fmt.Println("Done")
+	fmt.Printf("All media is stored in: %v\n", dlPath)
 }
