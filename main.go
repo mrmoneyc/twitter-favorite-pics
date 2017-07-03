@@ -290,10 +290,11 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 				wg.Add(1)
 				go unFavoriteTweet(&wg, client, v.IDStr)
 			}
+
+			log.Printf("ScreenName: %v, Tweet ID: %v, Num of media: %v\n", v.User.ScreenName, v.IDStr, len(v.Entities.Media))
 		}
 
 		lastTweetID = v.IDStr
-		log.Printf("ScreenName: %v, Tweet ID: %v\n", v.User.ScreenName, lastTweetID)
 	}
 
 	wg.Wait()
