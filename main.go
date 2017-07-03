@@ -32,6 +32,19 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+func getHomeDir() string {
+	if runtime.GOOS == "windows" {
+		home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+		if home == "" {
+			home = os.Getenv("USERPROFILE")
+		}
+
+		return home
+	}
+
+	return os.Getenv("HOME")
+}
+
 func getConfig() (string, map[string]string, error) {
 	cfgFolder := os.Getenv("HOME")
 
@@ -149,7 +162,7 @@ func getAuthorizeToken(c *oauth.Consumer, cfg map[string]string) (*oauth.AccessT
 	return authorizeToken, nil
 }
 
-func downloadMedia(wg *sync.WaitGroup, url string, fileName string, screenName string) {
+func downloadMedia(wg *sync.WaitGroup, url string, dlPath string, fileName string) {
 	defer wg.Done()
 	fmt.Printf("Get %v\n", fileName)
 
@@ -160,17 +173,11 @@ func downloadMedia(wg *sync.WaitGroup, url string, fileName string, screenName s
 
 	defer resp.Body.Close()
 
-	currentPath, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
+	if err := os.MkdirAll(dlPath, 0755); err != nil {
 		log.Fatal(err)
 	}
 
-	downloadPath := filepath.Join(currentPath, "downloads", screenName)
-	if err := os.MkdirAll(downloadPath, 0755); err != nil {
-		log.Fatal(err)
-	}
-
-	f, err := os.Create(filepath.Join(downloadPath, fileName))
+	f, err := os.Create(filepath.Join(dlPath, fileName))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -239,6 +246,22 @@ func main() {
 		log.Fatal(err)
 	}
 
+	dlPath, foundDLPath := cfg["DownloadPath"]
+	if !foundDLPath {
+		currentPath, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		dlPath = filepath.Join(currentPath, "downloads")
+	}
+	if dlPath[:2] == "~/" {
+		dlPath = filepath.Join(getHomeDir(), dlPath[2:])
+	}
+	dlPath = filepath.Join(dlPath, "twitter-favorite-pics")
+
+	fmt.Printf("Download Path: %v\n", dlPath)
+
 	var wg sync.WaitGroup
 
 	for _, v := range fav {
@@ -246,14 +269,12 @@ func main() {
 
 		if i < len(filterAccount) && filterAccount[i] == v.User.ScreenName {
 			for _, val := range v.Entities.Media {
-				// fmt.Printf("[%v] media_url: %v\n", k, val.MediaURL)
 				largeMediaURL := val.MediaURL + ":large"
 				sl := strings.Split(val.MediaURL, "/")
 				fileName := sl[len(sl)-1]
-				// fmt.Printf("%v -> %v, %v\n", k, largeMediaURL, fileName)
 
 				wg.Add(1)
-				go downloadMedia(&wg, largeMediaURL, fileName, v.User.ScreenName)
+				go downloadMedia(&wg, largeMediaURL, filepath.Join(dlPath, v.User.ScreenName), fileName)
 			}
 		}
 	}
