@@ -39,12 +39,12 @@ func getConfig() (string, map[string]string, error) {
 		cfgFolder = os.Getenv("APPDATA")
 
 		if cfgFolder == "" {
-			cfgFolder = filepath.Join(os.Getenv("USERPROFILE"), "Application Data", "TwitterFavoritePics")
+			cfgFolder = filepath.Join(os.Getenv("USERPROFILE"), "Application Data", "twitter-favorite-pics")
 		}
 
-		cfgFolder = filepath.Join(cfgFolder, "TwitterFavoritePics")
+		cfgFolder = filepath.Join(cfgFolder, "twitter-favorite-pics")
 	} else {
-		cfgFolder = filepath.Join(cfgFolder, ".config", "TwitterFavoritePics")
+		cfgFolder = filepath.Join(cfgFolder, ".config", "twitter-favorite-pics")
 	}
 
 	if err := os.MkdirAll(cfgFolder, 0700); err != nil {
