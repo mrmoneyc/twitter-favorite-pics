@@ -19,8 +19,6 @@ import (
 )
 
 const (
-	consumerKey       string = ""
-	consumerSecret    string = ""
 	requestTokenURL   string = "https://api.twitter.com/oauth/request_token"
 	authorizeTokenURL string = "https://api.twitter.com/oauth/authorize"
 	accessTokenURL    string = "https://api.twitter.com/oauth/access_token"
@@ -74,9 +72,20 @@ func getConfig() (string, map[string]string, error) {
 	}
 
 	if err != nil {
+		var consumerKey, consumerSecret, dlPath, filterAccount string
+		fmt.Print("Enter consumer key: ")
+		fmt.Scanln(&consumerKey)
+		fmt.Print("Enter consumer secret: ")
+		fmt.Scanln(&consumerSecret)
+		fmt.Print("Enter download path: ")
+		fmt.Scanln(&dlPath)
+		fmt.Print("Enter twitter screen name that want to filter for download (separate by comma): ")
+		fmt.Scanln(&filterAccount)
+
 		cfg["ConsumerKey"] = consumerKey
 		cfg["ConsumerSecret"] = consumerSecret
-		cfg["FilterAccount"] = ""
+		cfg["DownloadPath"] = dlPath
+		cfg["FilterAccount"] = filterAccount
 	} else {
 		err = json.Unmarshal(buf, &cfg)
 		if err != nil {
@@ -87,18 +96,18 @@ func getConfig() (string, map[string]string, error) {
 	return cfgFile, cfg, nil
 }
 
-func writeConfig(cfg map[string]string, cfgFile string) (bool, error) {
+func writeConfig(cfg map[string]string, cfgFile string) error {
 	buf, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	err = ioutil.WriteFile(cfgFile, buf, 0700)
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	return true, nil
+	return nil
 }
 
 func openBrowser(url string) error {
@@ -219,7 +228,7 @@ func main() {
 
 	cfg["AccessToken"] = authorizeToken.Token
 	cfg["AccessSecret"] = authorizeToken.Secret
-	_, err = writeConfig(cfg, cfgFile)
+	err = writeConfig(cfg, cfgFile)
 	if err != nil {
 		log.Fatal(err)
 	}
