@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -30,8 +31,16 @@ const (
 	apiRequestLimit   int    = 75
 )
 
+var (
+	lastTweetID string
+)
+
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	flag.StringVar(&lastTweetID, "tweetid", "", "Get media with an ID less than (that is, older than) or equal to the specified ID.")
+	flag.StringVar(&lastTweetID, "i", "", "Get media with an ID less than (that is, older than) or equal to the specified ID.")
+	flag.Parse()
 }
 
 func getHomeDir() string {
@@ -192,45 +201,45 @@ func getAuthorizeToken(c *oauth.Consumer, cfg map[string]string) (*oauth.AccessT
 	return authorizeToken, nil
 }
 
-func unFavoriteTweet(client *http.Client, tweetID string) {
+func unFavoriteTweet(wg *sync.WaitGroup, client *http.Client, tweetID string) {
+	defer wg.Done()
+
 	url := apiUnFavorite + tweetID
 
 	reqBody := map[string]string{"id": tweetID}
 	jsonBody, _ := json.Marshal(reqBody)
 	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Fatal(resp.Status)
+		log.Printf("%v: %v", url, resp.Status)
 	}
 }
 
 func downloadWorker(wg *sync.WaitGroup, url string, dlPath string, fileName string) {
 	defer wg.Done()
 
-	fmt.Printf("Get: %v\n", fileName)
-
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	defer resp.Body.Close()
 
 	if err := os.MkdirAll(dlPath, 0755); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	f, err := os.Create(filepath.Join(dlPath, fileName))
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	_, err = io.Copy(f, resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	f.Close()
@@ -260,7 +269,6 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 	}
 
 	var wg sync.WaitGroup
-	var lastTweetID string
 
 	for _, v := range fav {
 		i := sort.SearchStrings(filterAccount, v.User.ScreenName)
@@ -276,11 +284,13 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 			}
 
 			if unFav && len(v.Entities.Media) > 0 {
-				go unFavoriteTweet(client, v.IDStr)
+				wg.Add(1)
+				go unFavoriteTweet(&wg, client, v.IDStr)
 			}
 		}
 
 		lastTweetID = v.IDStr
+		fmt.Printf("Get from: %v\n", lastTweetID)
 	}
 
 	wg.Wait()
@@ -289,9 +299,13 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 }
 
 func main() {
+	if lastTweetID != "" {
+		fmt.Printf("Specify tweet ID: %v\n", lastTweetID)
+	}
+
 	cfgFile, cfg, err := getConfig()
 	if err != nil {
-		log.Fatal("Get configuration file failed: ", err)
+		log.Fatalln("Get configuration file failed: ", err)
 	}
 
 	var filterAccount []string
@@ -328,26 +342,26 @@ func main() {
 
 	authorizeToken, err := getAuthorizeToken(c, cfg)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 
 	cfg["AccessToken"] = authorizeToken.Token
 	cfg["AccessSecret"] = authorizeToken.Secret
 	err = writeConfig(cfg, cfgFile)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 
 	client, err := c.MakeHttpClient(authorizeToken)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 
 	dlPath, foundDLPath := cfg["DownloadPath"]
 	if !foundDLPath {
 		currentPath, err := filepath.Abs(filepath.Dir(os.Args[0]))
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalln(err)
 		}
 
 		dlPath = filepath.Join(currentPath, "downloads")
@@ -357,13 +371,12 @@ func main() {
 	}
 	dlPath = filepath.Join(dlPath, "twitter-favorite-pics")
 
-	var lastTweetID string
 	continueDL := "y"
 	reqCounter := 0
 	for continueDL == "y" || dlWithoutAsk {
 		if reqCounter >= apiRequestLimit {
-			fmt.Printf("API request quota exceeded, wait for 15 minute to unlock...")
-			time.Sleep(15 * time.Minute)
+			fmt.Printf("API request quota exceeded, wait for 16 minute to unlock...")
+			time.Sleep(16 * time.Minute)
 			reqCounter = 0
 		}
 
@@ -374,7 +387,7 @@ func main() {
 
 		lastTweetID, err = downloadMedia(client, url, dlPath, filterAccount, unFav)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalln(err)
 			break
 		}
 
