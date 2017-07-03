@@ -28,6 +28,10 @@ const (
 	apiFavoriteList   string = apiBase + "favorites/list.json?count=201"
 )
 
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 func getConfig() (string, map[string]string, error) {
 	cfgFolder := os.Getenv("HOME")
 
