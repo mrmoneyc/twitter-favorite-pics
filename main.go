@@ -293,7 +293,7 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 		}
 
 		lastTweetID = v.IDStr
-		log.Printf("Tweet ID: %v\n", lastTweetID)
+		log.Printf("ScreenName: %v, Tweet ID: %v\n", v.User.ScreenName, lastTweetID)
 	}
 
 	wg.Wait()
