@@ -32,14 +32,14 @@ const (
 )
 
 var (
-	lastTweetID string
+	tweetID string
 )
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	flag.StringVar(&lastTweetID, "tweetid", "", "Get media with an ID less than (that is, older than) or equal to the specified ID.")
-	flag.StringVar(&lastTweetID, "i", "", "Get media with an ID less than (that is, older than) or equal to the specified ID.")
+	flag.StringVar(&tweetID, "tweetid", "", "Get media with an ID less than (that is, older than) or equal to the specified ID.")
+	flag.StringVar(&tweetID, "i", "", "Get media with an ID less than (that is, older than) or equal to the specified ID.")
 	flag.Parse()
 }
 
@@ -201,12 +201,12 @@ func getAuthorizeToken(c *oauth.Consumer, cfg map[string]string) (*oauth.AccessT
 	return authorizeToken, nil
 }
 
-func unFavoriteTweet(wg *sync.WaitGroup, client *http.Client, tweetID string) {
+func unFavoriteTweet(wg *sync.WaitGroup, client *http.Client, entityID string) {
 	defer wg.Done()
 
-	url := apiUnFavorite + tweetID
+	url := apiUnFavorite + entityID
 
-	reqBody := map[string]string{"id": tweetID}
+	reqBody := map[string]string{"id": entityID}
 	jsonBody, _ := json.Marshal(reqBody)
 	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -214,12 +214,14 @@ func unFavoriteTweet(wg *sync.WaitGroup, client *http.Client, tweetID string) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("%v: %v", url, resp.Status)
+		log.Printf("%v: %v\n", url, resp.Status)
 	}
 }
 
 func downloadWorker(wg *sync.WaitGroup, url string, dlPath string, fileName string) {
 	defer wg.Done()
+
+	log.Printf("Get %v\n", fileName)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -268,6 +270,7 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 		return "", err
 	}
 
+	var lastTweetID string
 	var wg sync.WaitGroup
 
 	for _, v := range fav {
@@ -290,7 +293,7 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 		}
 
 		lastTweetID = v.IDStr
-		fmt.Printf("Get from: %v\n", lastTweetID)
+		log.Printf("Tweet ID: %v\n", lastTweetID)
 	}
 
 	wg.Wait()
@@ -299,10 +302,6 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 }
 
 func main() {
-	if lastTweetID != "" {
-		fmt.Printf("Specify tweet ID: %v\n", lastTweetID)
-	}
-
 	cfgFile, cfg, err := getConfig()
 	if err != nil {
 		log.Fatalln("Get configuration file failed: ", err)
@@ -371,11 +370,19 @@ func main() {
 	}
 	dlPath = filepath.Join(dlPath, "twitter-favorite-pics")
 
+	var lastTweetID string
+	if tweetID != "" {
+		lastTweetID = tweetID
+		fmt.Printf("Specify tweet ID: %v\n", tweetID)
+
+	}
+
 	continueDL := "y"
 	reqCounter := 0
 	for continueDL == "y" || dlWithoutAsk {
 		if reqCounter >= apiRequestLimit {
-			fmt.Printf("API request quota exceeded, wait for 16 minute to unlock...")
+			log.Printf("Last tweet ID: %v\n", lastTweetID)
+			log.Println("API request quota exceeded, wait for 16 minute to unlock...")
 			time.Sleep(16 * time.Minute)
 			reqCounter = 0
 		}
@@ -399,5 +406,6 @@ func main() {
 		reqCounter++
 	}
 
-	fmt.Printf("All media is stored in: %v\n", dlPath)
+	log.Printf("Last tweet ID: %v\n", lastTweetID)
+	log.Printf("All media is stored in: %v\n", dlPath)
 }
