@@ -392,10 +392,16 @@ func main() {
 			url = apiGetFavorites + "&max_id=" + lastTweetID
 		}
 
-		lastTweetID, err = downloadMedia(client, url, dlPath, filterAccount, unFav)
+		prevTweetID, err := downloadMedia(client, url, dlPath, filterAccount, unFav)
 		if err != nil {
 			log.Fatalln(err)
 			break
+		}
+
+		if prevTweetID > lastTweetID {
+			log.Fatalf("No older tweet, exit! Last tweet ID: %v\n", prevTweetID)
+		} else {
+			lastTweetID = prevTweetID
 		}
 
 		if !dlWithoutAsk {
