@@ -264,7 +264,7 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 		return "", err
 	}
 
-	var fav FavoriteList
+	var fav []FavoriteList
 
 	if err := json.Unmarshal([]byte(body), &fav); err != nil {
 		return "", err

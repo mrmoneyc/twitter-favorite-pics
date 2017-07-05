@@ -1,7 +1,7 @@
 package main
 
 // FavoriteList is mapping to user favorited tweet list
-type FavoriteList []struct {
+type FavoriteList struct {
 	Coordinates        interface{} `json:"coordinates"`
 	Truncated          bool        `json:"truncated"`
 	Favorited          bool        `json:"favorited"`
