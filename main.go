@@ -274,9 +274,9 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 	var wg sync.WaitGroup
 
 	for _, v := range fav {
-		i := sort.SearchStrings(filterAccount, v.User.ScreenName)
+		i := sort.SearchStrings(filterAccount, strings.ToLower(v.User.ScreenName))
 
-		if (i < len(filterAccount) && filterAccount[i] == v.User.ScreenName) || len(filterAccount) <= 0 {
+		if (i < len(filterAccount) && filterAccount[i] == strings.ToLower(v.User.ScreenName)) || len(filterAccount) <= 0 {
 			for _, val := range v.Entities.Media {
 				largeMediaURL := val.MediaURL + ":large"
 				sl := strings.Split(val.MediaURL, "/")
@@ -312,7 +312,7 @@ func main() {
 	if len(cfg["FilterAccount"]) > 0 {
 		fmt.Printf("Filter account: %v\n", cfg["FilterAccount"])
 
-		filterAccount = strings.Split(cfg["FilterAccount"], ",")
+		filterAccount = strings.Split(strings.ToLower(cfg["FilterAccount"]), ",")
 		sort.Strings(filterAccount)
 	}
 
