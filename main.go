@@ -26,7 +26,7 @@ const (
 	authorizeTokenURL string = "https://api.twitter.com/oauth/authorize"
 	accessTokenURL    string = "https://api.twitter.com/oauth/access_token"
 	apiBase           string = "https://api.twitter.com/1.1/"
-	apiGetFavorites   string = apiBase + "favorites/list.json?count=200"
+	apiGetFavorites   string = apiBase + "favorites/list.json?include_entities=true&count=200"
 	apiUnFavorite     string = apiBase + "favorites/destroy.json?id="
 	apiRequestLimit   int    = 75
 )
@@ -286,7 +286,19 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 				go downloadWorker(&wg, largeMediaURL, filepath.Join(dlPath, v.User.ScreenName), fileName)
 			}
 
-			if unFav && len(v.Entities.Media) > 0 {
+			if unFav {
+				if len(v.Entities.Media) == 0 {
+					f, err := os.OpenFile("./dl_failed.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+					if err != nil {
+						continue
+					}
+					defer f.Close()
+
+					for _, val := range v.Entities.Urls {
+						_, _ = f.WriteString(val.URL + "\n")
+					}
+				}
+
 				wg.Add(1)
 				go unFavoriteTweet(&wg, client, v.IDStr)
 			}

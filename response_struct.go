@@ -9,7 +9,11 @@ type FavoriteList struct {
 	IDStr              string      `json:"id_str"`
 	InReplyToUserIDStr interface{} `json:"in_reply_to_user_id_str"`
 	Entities           struct {
-		Urls         []interface{} `json:"urls"`
+		Urls []struct {
+			URL         string `json:"url"`
+			DisplayURL  string `json:"display_url"`
+			ExpandedURL string `json:"expanded_url"`
+		} `json:"urls"`
 		HashTags     []interface{} `json:"hashtags"`
 		UserMentions []interface{} `json:"user_mentions"`
 		Media        []struct {
