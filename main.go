@@ -290,8 +290,17 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 				go downloadWorker(&wg, largeMediaURL, filepath.Join(dlPath, v.User.ScreenName), fileName)
 			}
 
+			for _, val := range v.ExtendedEntities.Media {
+				largeMediaURL := val.MediaURL + ":large"
+				sl := strings.Split(val.MediaURL, "/")
+				fileName := sl[len(sl)-1]
+
+				wg.Add(1)
+				go downloadWorker(&wg, largeMediaURL, filepath.Join(dlPath, v.User.ScreenName), fileName)
+			}
+
 			if unFav {
-				if len(v.Entities.Media) == 0 {
+				if len(v.Entities.Media) == 0 && len(v.ExtendedEntities.Media) == 0 {
 					f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 					if err != nil {
 						fmt.Println(err)
@@ -308,7 +317,7 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 				go unFavoriteTweet(&wg, client, v.IDStr)
 			}
 
-			log.Printf("ScreenName: %v, Tweet ID: %v, Num of media: %v\n", v.User.ScreenName, v.IDStr, len(v.Entities.Media))
+			log.Printf("ScreenName: %v, Tweet ID: %v, Num of media: %v\n", v.User.ScreenName, v.IDStr, len(v.Entities.Media)+len(v.ExtendedEntities.Media))
 		}
 
 		lastTweetID = v.IDStr

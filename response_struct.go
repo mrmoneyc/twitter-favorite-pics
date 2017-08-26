@@ -50,6 +50,48 @@ type FavoriteList struct {
 			} `json:"sizes"`
 		} `json:"media"`
 	} `json:"entities"`
+	ExtendedEntities struct {
+		Urls []struct {
+			URL         string `json:"url"`
+			DisplayURL  string `json:"display_url"`
+			ExpandedURL string `json:"expanded_url"`
+		} `json:"urls"`
+		HashTags     []interface{} `json:"hashtags"`
+		UserMentions []interface{} `json:"user_mentions"`
+		Media        []struct {
+			ID            int    `json:"id"`
+			IDStr         string `json:"id_str"`
+			Indice        []int  `json:"indices"`
+			MediaURL      string `json:"media_url"`
+			MediaURLHTTPS string `json:"media_url_https"`
+			URL           string `json:"url"`
+			DisplayURL    string `json:"display_url"`
+			ExpandedURL   string `json:"expanded_url"`
+			Type          string `json:"type"`
+			Sizes         struct {
+				Medium struct {
+					W      int    `json:"w"`
+					H      int    `json:"h"`
+					Resize string `json:"resize"`
+				} `json:"medium"`
+				Thumb struct {
+					W      int    `json:"w"`
+					H      int    `json:"h"`
+					Resize string `json:"resize"`
+				} `json:"thumb"`
+				Small struct {
+					W      int    `json:"w"`
+					H      int    `json:"h"`
+					Resize string `json:"resize"`
+				} `json:"small"`
+				Large struct {
+					W      int    `json:"w"`
+					H      int    `json:"h"`
+					Resize string `json:"resize"`
+				} `json:"large"`
+			} `json:"sizes"`
+		} `json:"media"`
+	} `json:"extended_entities"`
 	Text                 string      `json:"text"`
 	Contributors         interface{} `json:"contributors"`
 	ID                   int         `json:"id"`
