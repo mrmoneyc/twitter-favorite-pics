@@ -85,6 +85,7 @@ func getConfig() (string, map[string]string, error) {
 
 	if err != nil {
 		var consumerKey, consumerSecret, dlPath, filterAccount, dlWithoutAsk, unFavAfterDL string
+		logPath := "~/twtr_fav_img_dl.log"
 		fmt.Print("Enter consumer key: ")
 		fmt.Scanln(&consumerKey)
 		fmt.Print("Enter consumer secret: ")
@@ -99,11 +100,14 @@ func getConfig() (string, map[string]string, error) {
 		fmt.Print("Un-favorite tweet after download? (y/N): ")
 		fmt.Scanln(&unFavAfterDL)
 		unFavAfterDL = strings.ToLower(unFavAfterDL)
+		fmt.Print("Enter log path: ")
+		fmt.Scanln(&logPath)
 
 		cfg["ConsumerKey"] = consumerKey
 		cfg["ConsumerSecret"] = consumerSecret
 		cfg["DownloadPath"] = dlPath
 		cfg["FilterAccount"] = filterAccount
+		cfg["LogPath"] = logPath
 
 		if dlWithoutAsk == "y" || dlWithoutAsk == "yes" {
 			cfg["DownloadWithoutAsking"] = "true"
@@ -247,7 +251,7 @@ func downloadWorker(wg *sync.WaitGroup, url string, dlPath string, fileName stri
 	f.Close()
 }
 
-func downloadMedia(client *http.Client, url string, dlPath string, filterAccount []string, unFav bool) (string, error) {
+func downloadMedia(client *http.Client, url string, dlPath string, filterAccount []string, unFav bool, logPath string) (string, error) {
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", err
@@ -288,8 +292,9 @@ func downloadMedia(client *http.Client, url string, dlPath string, filterAccount
 
 			if unFav {
 				if len(v.Entities.Media) == 0 {
-					f, err := os.OpenFile("./dl_failed.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+					f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 					if err != nil {
+						fmt.Println(err)
 						continue
 					}
 					defer f.Close()
@@ -340,6 +345,19 @@ func main() {
 		unFav = true
 	} else {
 		unFav = false
+	}
+
+	logPath, foundLogPath := cfg["LogPath"]
+	if !foundLogPath {
+		currentPath, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		logPath = filepath.Join(currentPath, "twtr_fav_img_dl.log")
+	}
+	if logPath[:2] == "~/" {
+		logPath = filepath.Join(getHomeDir(), logPath[2:])
 	}
 
 	c := oauth.NewConsumer(
@@ -405,7 +423,7 @@ func main() {
 			url = apiGetFavorites + "&max_id=" + lastTweetID
 		}
 
-		prevTweetID, err := downloadMedia(client, url, dlPath, filterAccount, unFav)
+		prevTweetID, err := downloadMedia(client, url, dlPath, filterAccount, unFav, logPath)
 		if err != nil {
 			log.Fatalln(err)
 			break
